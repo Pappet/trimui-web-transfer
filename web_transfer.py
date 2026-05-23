@@ -211,13 +211,25 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
             self.send_error(404, "Kein Cover gefunden")
         # ---------------------------------------------------
 
+        # Status-Meldungen aus Redirect (nach erfolgreichem POST)
+        status_msg = ""
+        status_type = ""
+        status_visible = "none"
+        if self.path in ('/', '/index.html', '/thumbnails', '/sync'):
+            query = urllib.parse.urlparse(self.path).query
+            params = urllib.parse.parse_qs(query)
+            status_msg = html.escape(params.get('msg', [''])[0])
+            status_type = html.escape(params.get('status', [''])[0])
+            if status_msg:
+                status_visible = "block"
+
         # UI Pages
         elif self.path == '/thumbnails':
-            self.send_ui("thumbnail")
+            self.send_ui("thumbnail", status_msg, status_type, status_visible)
         elif self.path == '/sync':
-            self.send_ui("sync")
+            self.send_ui("sync", status_msg, status_type, status_visible)
         elif self.path == '/' or self.path == '/index.html':
-            self.send_ui("upload")
+            self.send_ui("upload", status_msg, status_type, status_visible)
         elif self.path == '/favicon.ico':
             self.send_error(404)
         else:
@@ -229,7 +241,7 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(json.dumps(data).encode())
 
-    def send_ui(self, mode):
+    def send_ui(self, mode, status_msg="", status_type="", status_visible="none"):
         try:
             with open(TEMPLATE_FILE, 'r', encoding='utf-8') as f:
                 content = f.read()
@@ -255,7 +267,10 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
             '{{NAV_SYNC_ACTIVE}}': 'active' if mode == 'sync' else '',
             '{{DISPLAY_UPLOAD}}': 'block' if mode == 'upload' else 'none',
             '{{DISPLAY_THUMB}}': 'block' if mode == 'thumbnail' else 'none',
-            '{{DISPLAY_SYNC}}': 'block' if mode == 'sync' else 'none'
+            '{{DISPLAY_SYNC}}': 'block' if mode == 'sync' else 'none',
+            '{{STATUS_MSG}}': status_msg,
+            '{{STATUS_TYPE}}': status_type,
+            '{{STATUS_VISIBLE}}': status_visible
         }
         
         for key, value in replacements.items():
@@ -287,6 +302,7 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
 
         # Upload Handler
         if self.path == '/post_upload':
+            mode = "normal"
             try:
                 ctype, pdict = cgi.parse_header(self.headers['Content-Type'])
                 if ctype == 'multipart/form-data':
@@ -333,14 +349,19 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
                                     shutil.copyfileobj(fileitem.file, f)
                                 count += 1
                         
-                        safe_path = html.escape(target_path)
-                        msg = f"{count} Datei(en) empfangen in:<br><code>{safe_path}</code>"
-                        self.send_response(200); self.end_headers()
-                        self.wfile.write(f"<html><body style='background:#222;color:#fff;font-family:sans-serif;text-align:center;padding:50px;'><h2>{msg}</h2><br><a href='/' style='color:#007bff;font-size:1.2em'>OK</a></body></html>".encode())
+                        msg = urllib.parse.quote(f"{count} Datei(en) empfangen")
+                        self.send_response(303)
+                        self.send_header('Location', f'/?status=success&msg={msg}')
+                        self.end_headers()
 
             except Exception as e:
                 error_msg = html.escape(str(e))
-                self.send_response(500); self.end_headers(); self.wfile.write(f"Error: {error_msg}".encode())
+                if mode == "thumbnail":
+                    self.send_response(500); self.end_headers(); self.wfile.write(f"Error: {error_msg}".encode())
+                else:
+                    self.send_response(303)
+                    self.send_header('Location', f'/?status=error&msg={urllib.parse.quote(error_msg)}')
+                    self.end_headers()
         else:
             self.send_error(404, "Pfad nicht gefunden")
 

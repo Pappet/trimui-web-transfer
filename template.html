@@ -44,6 +44,12 @@
         
         #preview-container { text-align: center; display: none; margin-top: 10px; background: #000; padding: 10px; border-radius: 4px; }
         canvas { max-width: 100%; height: auto; border: 1px solid #555; }
+        
+        /* Status Banner */
+        .status-banner { padding: 12px 16px; border-radius: 6px; margin-bottom: 15px; text-align: center; font-weight: bold; display: none; }
+        .status-success { background: #1e3a2f; color: #28a745; border: 1px solid #28a745; }
+        .status-error { background: #3a1e1e; color: #dc3545; border: 1px solid #dc3545; display: block; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
     </style>
 </head>
 <body>
@@ -51,6 +57,8 @@
         <div class="spinner"></div>
         <h2 id="loading-text" style="color:white;">Wird verarbeitet...</h2>
     </div>
+
+    <div class="status-banner status-{{STATUS_TYPE}}" style="display: {{STATUS_VISIBLE}};">{{STATUS_MSG}}</div>
 
     <h1>Trimui Smart Pro</h1>
     
@@ -66,7 +74,7 @@
 
     <div id="upload-section" class="card" style="display: {{DISPLAY_UPLOAD}};">
         <h2>Dateien hochladen (PC -> Trimui)</h2>
-        <form action="/post_upload" method="post" enctype="multipart/form-data" onsubmit="showLoading('Wird hochgeladen...')">
+        <form action="/post_upload" method="post" enctype="multipart/form-data" onsubmit="this.querySelector('button[type=submit]').disabled = true; showLoading('Wird hochgeladen...')">
             <div class="row">
                 <div class="col">
                     <label>1. Art / Hauptordner:</label>
@@ -122,7 +130,7 @@
             </div>
         </div>
         
-        <button type="button" onclick="startP2PTransfer()" style="margin-top:15px;">An Trimui Senden</button>
+        <button type="button" class="btn-sync" onclick="startP2PTransfer()" style="margin-top:15px;">An Trimui Senden</button>
         <p id="p2p-status" style="text-align: center; margin-top: 10px; font-weight: bold;"></p>
     </div>
 
@@ -267,6 +275,8 @@
         }
 
         function startP2PTransfer() {
+            const btn = document.querySelector('#sync-section .btn-sync');
+            if (btn) btn.disabled = true;
             const ip = document.getElementById('peerSelect').value;
             const file = document.getElementById('syncFileSelect').value;
             const target = document.getElementById('remoteTargetInput').value;
@@ -284,6 +294,7 @@
             .then(r => r.json())
             .then(data => {
                 hideLoading();
+                if (btn) btn.disabled = false;
                 if(data.success) {
                     p2pStatus.innerHTML = `<span style="color:#28a745">Erfolgreich gesendet!</span>`;
                 } else {
@@ -292,6 +303,7 @@
             })
             .catch(err => {
                 hideLoading();
+                if (btn) btn.disabled = false;
                 p2pStatus.innerText = "Verbindungsfehler.";
             });
         }
