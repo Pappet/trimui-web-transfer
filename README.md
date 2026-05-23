@@ -38,6 +38,16 @@ No installation on your PC needed — open a browser and go.*
 
 ---
 
+## Security Notice
+
+This server has **no authentication** and allows uploading, renaming and
+deleting files under `/mnt/SDCARD`. It is intended for use on a **trusted
+local network only** (your home Wi-Fi). Do not expose port `8000` to the
+public internet, and do not run it on untrusted networks (cafés, hotels,
+conferences).
+
+---
+
 ## Setup
 
 **1.** Copy all files to your TrimUI:
