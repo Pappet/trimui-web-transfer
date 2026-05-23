@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Trimui Manager v8.3.2 P2P</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #1a1a1a; color: #eee; max-width: 900px; margin: auto; }
+        h1 { color: #007bff; text-align: center; margin-bottom: 5px; }
+        
+        /* Nav & Layout */
+        .nav { display: flex; justify-content: center; gap: 10px; margin-bottom: 20px; flex-wrap: wrap; }
+        .nav a { padding: 10px 20px; background: #333; color: white; text-decoration: none; border-radius: 5px; margin-bottom: 5px; }
+        .nav a.active { background: #007bff; }
+        .card { background: #2d2d2d; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); margin-bottom: 20px; }
+        .row { display: flex; gap: 10px; flex-wrap: wrap; }
+        .col { flex: 1; min-width: 250px; }
+        
+        /* Form Elements */
+        select, input, button { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 4px; border: 1px solid #444; background: #222; color: white; box-sizing: border-box; }
+        input[readonly] { background: #333; color: #888; border-color: #333; cursor: not-allowed; }
+        button { background: #28a745; color: white; font-weight: bold; border: none; cursor: pointer; }
+        button:hover { background: #218838; }
+        label { display: block; margin-bottom: 5px; color: #aaa; font-weight: bold; font-size: 0.9em; }
+        
+        /* Storage Bar */
+        #storage-bar { background: #333; border-radius: 4px; overflow: hidden; height: 25px; margin-bottom: 5px; position: relative; }
+        #storage-fill { background: #007bff; height: 100%; width: 0%; transition: width 0.5s; }
+        #storage-text { position: absolute; top: 0; left: 0; width: 100%; text-align: center; font-size: 0.8em; line-height: 25px; color: #fff; text-shadow: 1px 1px 2px black; }
+        #file-size-info { margin-top: -10px; margin-bottom: 15px; font-size: 0.9em; color: #aaa; font-style: italic; text-align: right; }
+
+        /* Spinner */
+        #loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 999; display: none; justify-content: center; align-items: center; flex-direction: column; }
+        .spinner { border: 5px solid #333; border-top: 5px solid #007bff; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 15px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        /* Lists */
+        #rom-list-container { max-height: 400px; overflow-y: auto; background: #222; border: 1px solid #444; border-radius: 4px; padding: 5px; }
+        .rom-row { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid #333; }
+        .rom-row:hover { background: #333; }
+        .btn-group { display: flex; gap: 5px; }
+        .copy-btn, .select-btn { width: auto; padding: 5px 10px; margin: 0; font-size: 0.8em; }
+        .copy-btn { background: #444; }
+        .select-btn { background: #007bff; }
+        
+        #preview-container { text-align: center; display: none; margin-top: 10px; background: #000; padding: 10px; border-radius: 4px; }
+        canvas { max-width: 100%; height: auto; border: 1px solid #555; }
+    </style>
+</head>
+<body>
+    <div id="loading-overlay">
+        <div class="spinner"></div>
+        <h2 id="loading-text" style="color:white;">Wird verarbeitet...</h2>
+    </div>
+
+    <h1>Trimui Smart Pro</h1>
+    
+    <div style="max-width: 600px; margin: 0 auto 20px auto;">
+        <div id="storage-bar"><div id="storage-fill"></div><div id="storage-text">Lade Speicherinfo...</div></div>
+    </div>
+    
+    <div class="nav">
+        <a href="/" class="{{NAV_UPLOAD_ACTIVE}}">Datei Upload</a>
+        <a href="/thumbnails" class="{{NAV_THUMB_ACTIVE}}">Cover Manager</a>
+        <a href="/sync" class="{{NAV_SYNC_ACTIVE}}">P2P Transfer</a>
+    </div>
+
+    <div id="upload-section" class="card" style="display: {{DISPLAY_UPLOAD}};">
+        <h2>Dateien hochladen (PC -> Trimui)</h2>
+        <form action="/post_upload" method="post" enctype="multipart/form-data" onsubmit="showLoading('Wird hochgeladen...')">
+            <div class="row">
+                <div class="col">
+                    <label>1. Art / Hauptordner:</label>
+                    <select id="baseFolderSelect" onchange="loadSubfolders('baseFolderSelect','subFolderSelect')">{{BASE_OPTS}}</select>
+                </div>
+                <div class="col">
+                    <label>2. Ziel-Ordner:</label>
+                    <select id="subFolderSelect" name="target_folder"><option value="{{ROOT_DIR}}">- Lade -</option></select>
+                </div>
+            </div>
+            <label>Datei(en) auswählen:</label>
+            <input type="file" name="file" multiple id="fileInput">
+            <div id="file-size-info"></div>
+            <button type="submit">Hochladen</button>
+        </form>
+    </div>
+
+    <div id="sync-section" class="card" style="display: {{DISPLAY_SYNC}};">
+        <h2>P2P Transfer (Trimui -> Trimui)</h2>
+        <p style="color:#aaa; font-size:0.9em;">Wähle eine lokale Datei. Sie wird in denselben Ordner auf dem anderen Gerät gesendet.</p>
+        
+        <div class="row">
+            <div class="col">
+                <label style="color:#007bff;">1. Hauptordner:</label>
+                <select id="syncBaseFolder" onchange="loadSyncSubfolders()">{{BASE_OPTS}}</select>
+            </div>
+            <div class="col">
+                <label style="color:#007bff;">2. Unterordner:</label>
+                <select id="syncSubFolder" onchange="loadSyncFiles()"><option value="{{ROOT_DIR}}">- Lade -</option></select>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col">
+                <label>3. Datei auswählen:</label>
+                <select id="syncFileSelect"><option>-</option></select>
+            </div>
+            <div class="col">
+                <label>Ziel-Pfad (Automatisch):</label>
+                <input type="text" id="remoteTargetInput" value="" readonly>
+            </div>
+        </div>
+
+        <hr style="border:0; border-top:1px solid #444; margin: 15px 0;">
+        
+        <div class="row">
+            <div class="col">
+                <label style="color:#28a745;">4. Ziel-Gerät (Empfänger):</label>
+                <select id="peerSelect">
+                    <option value="">Suche Geräte...</option>
+                </select>
+                <button type="button" onclick="loadPeers()" style="padding: 5px; margin-bottom:10px; background:#444; font-size:0.8em;">Erneuern</button>
+            </div>
+        </div>
+        
+        <button type="button" onclick="startP2PTransfer()" style="margin-top:15px;">An Trimui Senden</button>
+        <p id="p2p-status" style="text-align: center; margin-top: 10px; font-weight: bold;"></p>
+    </div>
+
+    <div id="thumbnail-section" class="card" style="display: {{DISPLAY_THUMB}};">
+        <h2>Cover Manager</h2>
+        <div style="background: #333; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+            <label style="color: #007bff;">SCHRITT 1: ROM Namen kopieren</label>
+            <select id="consoleSelect" onchange="loadRoms()"><option>Lade Konsolen...</option></select>
+            <div id="rom-list-container"><div style="padding:10px; color:#888;">Bitte Konsole wählen.</div></div>
+        </div>
+        <div style="background: #333; padding: 15px; border-radius: 8px;">
+            <label style="color: #007bff;">SCHRITT 2: Bild zuweisen & Upload</label>
+            <label>Ziel-ROM:</label>
+            <select id="romSelect"><option>-</option></select>
+            <label>Bild wählen:</label>
+            <input type="file" id="imgInput" accept="image/*">
+            <div id="preview-container">
+                <p style="margin:0 0 5px 0; font-size:0.8em;">Vorschau (600x800):</p>
+                <canvas id="canvas" width="600" height="800"></canvas>
+            </div>
+            <button type="button" onclick="processAndUpload()" style="margin-top: 15px;">Cover Speichern</button>
+            <p id="status" style="text-align: center; margin-top: 10px; font-weight: bold;"></p>
+        </div>
+    </div>
+
+    <script>
+        function showLoading(msg) {
+            document.getElementById('loading-text').innerText = msg;
+            document.getElementById('loading-overlay').style.display = 'flex';
+        }
+        function hideLoading() { document.getElementById('loading-overlay').style.display = 'none'; }
+        
+        function formatBytes(bytes, decimals = 2) {
+            if (!+bytes) return '0 Bytes';
+            const k = 1024;
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return `${parseFloat((bytes / Math.pow(k, i)).toFixed(decimals))} ${['Bytes', 'KB', 'MB', 'GB', 'TB'][i]}`;
+        }
+
+        // --- STORAGE ---
+        function updateStorage() {
+            fetch('/api/status').then(r => r.json()).then(data => {
+                const percent = (data.used / data.total) * 100;
+                document.getElementById('storage-fill').style.width = percent + '%';
+                document.getElementById('storage-text').innerText = `Belegt: ${formatBytes(data.used)} / Gesamt: ${formatBytes(data.total)}`;
+            });
+        }
+        updateStorage();
+
+        // --- UPLOAD LOGIC ---
+        const fileInput = document.getElementById('fileInput');
+        if(fileInput) {
+            fileInput.addEventListener('change', function() {
+                let totalSize = 0;
+                if(this.files.length > 0) {
+                    for(let i=0; i<this.files.length; i++) totalSize += this.files[i].size;
+                    document.getElementById('file-size-info').innerHTML = `Ausgewählt: <b>${this.files.length} Datei(en)</b> (${formatBytes(totalSize)})`;
+                }
+            });
+        }
+
+        function loadSubfolders(sourceId, targetId) {
+            const basePath = document.getElementById(sourceId).value;
+            const subSelect = document.getElementById(targetId);
+            subSelect.innerHTML = '<option>Lade...</option>';
+            fetch('/api/dirs?path=' + encodeURIComponent(basePath))
+                .then(r => r.json())
+                .then(dirs => {
+                    subSelect.innerHTML = '';
+                    const baseName = basePath.split('/').pop() || 'Root';
+                    subSelect.innerHTML += `<option value="${basePath}">Direkt in "${baseName}/"</option>`;
+                    subSelect.innerHTML += `<option disabled>──────────</option>`;
+                    dirs.forEach(d => {
+                        const fullPath = basePath + '/' + d;
+                        subSelect.innerHTML += `<option value="${fullPath}">${d}</option>`;
+                    });
+                });
+        }
+        
+        // Initial Upload Subfolders
+        if (document.querySelector('#upload-section').style.display === 'block') { loadSubfolders('baseFolderSelect','subFolderSelect'); }
+
+        // --- P2P SYNC LOGIC ---
+        function loadSyncSubfolders() {
+            const basePath = document.getElementById('syncBaseFolder').value;
+            const subSelect = document.getElementById('syncSubFolder');
+            subSelect.innerHTML = '<option>Lade...</option>';
+            
+            fetch('/api/dirs?path=' + encodeURIComponent(basePath))
+                .then(r => r.json())
+                .then(dirs => {
+                    subSelect.innerHTML = '';
+                    const baseName = basePath.split('/').pop() || 'Root';
+                    subSelect.innerHTML += `<option value="${basePath}">Direkt in "${baseName}/"</option>`;
+                    subSelect.innerHTML += `<option disabled>──────────</option>`;
+                    dirs.forEach(d => {
+                        const fullPath = basePath + '/' + d;
+                        subSelect.innerHTML += `<option value="${fullPath}">${d}</option>`;
+                    });
+                    loadSyncFiles();
+                });
+        }
+
+        function loadSyncFiles() {
+            const folder = document.getElementById('syncSubFolder').value;
+            const fileSel = document.getElementById('syncFileSelect');
+            
+            document.getElementById('remoteTargetInput').value = folder;
+            
+            fileSel.innerHTML = '<option>Lade Dateien...</option>';
+            fetch('/api/files?path=' + encodeURIComponent(folder))
+                .then(r => r.json())
+                .then(files => {
+                    fileSel.innerHTML = '';
+                    if(files.length === 0) fileSel.innerHTML = '<option value="">(Leer)</option>';
+                    files.forEach(f => {
+                        fileSel.innerHTML += `<option value="${folder}/${f}">${f}</option>`;
+                    });
+                });
+        }
+        
+        function loadPeers() {
+            const peerSel = document.getElementById('peerSelect');
+            peerSel.innerHTML = '<option>Suche...</option>';
+            fetch('/api/peers').then(r => r.json()).then(peers => {
+                peerSel.innerHTML = '';
+                if(peers.length === 0) {
+                    peerSel.innerHTML = '<option value="">Keine anderen Trimuis gefunden</option>';
+                    peerSel.innerHTML += '<option disabled>──────────</option>';
+                    peerSel.innerHTML += '<option value="192.168.178.XX">Manuelle IP eingeben...</option>'; 
+                } else {
+                    peers.forEach(p => {
+                        peerSel.innerHTML += `<option value="${p.ip}">Gerät: ${p.ip} (${p.mac})</option>`;
+                    });
+                }
+            });
+        }
+
+        if (document.querySelector('#sync-section').style.display === 'block') { 
+            loadPeers(); 
+            loadSyncSubfolders();
+        }
+
+        function startP2PTransfer() {
+            const ip = document.getElementById('peerSelect').value;
+            const file = document.getElementById('syncFileSelect').value;
+            const target = document.getElementById('remoteTargetInput').value;
+            const p2pStatus = document.getElementById('p2p-status');
+            
+            if (!ip || !file || ip.includes('XX')) { alert("Bitte IP und Datei wählen."); return; }
+            
+            showLoading('Sende an ' + ip + '...');
+            
+            fetch('/api/transfer_start', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ file_path: file, target_ip: ip, target_folder: target })
+            })
+            .then(r => r.json())
+            .then(data => {
+                hideLoading();
+                if(data.success) {
+                    p2pStatus.innerHTML = `<span style="color:#28a745">Erfolgreich gesendet!</span>`;
+                } else {
+                    p2pStatus.innerHTML = `<span style="color:#dc3545">Fehler: ${data.message}</span>`;
+                }
+            })
+            .catch(err => {
+                hideLoading();
+                p2pStatus.innerText = "Verbindungsfehler.";
+            });
+        }
+
+        // --- THUMBNAIL / ROMS ---
+        let romData = {};
+        if (document.querySelector('#thumbnail-section').style.display === 'block') {
+            fetch('/api/roms').then(r => r.json()).then(data => {
+                romData = data;
+                const sel = document.getElementById('consoleSelect');
+                sel.innerHTML = '<option value="">Bitte Konsole wählen...</option>';
+                for (const k in data) { sel.innerHTML += `<option value="${k}">${k}</option>`; }
+            });
+            document.getElementById('romSelect').addEventListener('change', checkExistingCover);
+        }
+        
+        function loadRoms() {
+            const consoleKey = document.getElementById('consoleSelect').value;
+            const romSel = document.getElementById('romSelect');
+            const listContainer = document.getElementById('rom-list-container');
+            romSel.innerHTML = ''; listContainer.innerHTML = '';
+            
+            clearPreview();
+
+            if (romData[consoleKey]) {
+                romData[consoleKey].forEach(rom => { 
+                    romSel.innerHTML += `<option value="${rom}">${rom}</option>`; 
+                    const row = document.createElement('div');
+                    row.className = 'rom-row';
+                    
+                    const safeRom = rom.replace(/'/g, "\\'");
+                    
+                    row.innerHTML = `
+                        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-right:10px;">${rom}</span> 
+                        <div class="btn-group">
+                            <button class="select-btn" onclick="selectRom('${safeRom}')">Auswählen</button>
+                            <button class="copy-btn" onclick="copyAndSelect('${safeRom}', this)">Kopieren</button>
+                        </div>
+                    `;
+                    listContainer.appendChild(row);
+                });
+            }
+        }
+        
+        function copyAndSelect(rom, btn) {
+            selectRom(rom);
+            robustCopyToClipboard(rom, btn);
+        }
+        
+        function selectRom(rom) {
+            const sel = document.getElementById('romSelect');
+            sel.value = rom;
+            checkExistingCover();
+        }
+
+        function checkExistingCover() {
+            const consoleName = document.getElementById('consoleSelect').value;
+            const romName = document.getElementById('romSelect').value;
+            
+            if (!consoleName || !romName) return;
+
+            const url = `/api/cover?console=${encodeURIComponent(consoleName)}&rom=${encodeURIComponent(romName)}&t=${Date.now()}`;
+            
+            const img = new Image();
+            img.onload = function() {
+                const ctx = document.getElementById('canvas').getContext('2d');
+                ctx.clearRect(0, 0, 600, 800);
+                ctx.drawImage(img, 0, 0, 600, 800);
+                document.getElementById('preview-container').style.display = 'block';
+            };
+            img.onerror = function() {
+                clearPreview();
+            };
+            img.src = url;
+        }
+
+        function clearPreview() {
+            const ctx = document.getElementById('canvas').getContext('2d');
+            ctx.clearRect(0, 0, 600, 800);
+        }
+
+        function robustCopyToClipboard(text, btnElement) {
+            const original = btnElement.innerText;
+            
+            // Helper function für den visuellen Erfolgs-Effekt
+            const onSuccess = () => {
+                 btnElement.innerText = "Kopiert!"; 
+                 btnElement.style.background = "#28a745";
+                 setTimeout(() => { 
+                     btnElement.innerText = original; 
+                     btnElement.style.background = "#444"; 
+                 }, 1000);
+            };
+
+            // Versuch 1: Moderne API (oft blockiert bei HTTP)
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                 navigator.clipboard.writeText(text)
+                    .then(onSuccess)
+                    .catch(() => {
+                        // Wenn das fehlschlägt, Fallback nutzen
+                        fallbackCopy(text, onSuccess);
+                    });
+            } else {
+                // Versuch 2: Fallback für HTTP
+                fallbackCopy(text, onSuccess);
+            }
+        }
+        
+        function fallbackCopy(text, onSuccessCallback) {
+            // Wir erstellen ein unsichtbares Textfeld, fügen den Text ein, wählen ihn aus und führen den Browser-Befehl aus
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            
+            // Verstecken, aber im DOM lassen
+            textArea.style.position = "fixed";
+            textArea.style.left = "-9999px";
+            textArea.style.top = "0";
+            document.body.appendChild(textArea);
+            
+            textArea.focus();
+            textArea.select();
+            
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) onSuccessCallback();
+            } catch (err) {
+                console.error('Kopieren fehlgeschlagen', err);
+                alert('Kopieren nicht unterstützt. Bitte manuell kopieren.');
+            }
+            
+            document.body.removeChild(textArea);
+        }
+        
+        document.getElementById('imgInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    const ctx = document.getElementById('canvas').getContext('2d');
+                    ctx.clearRect(0, 0, 600, 800);
+                    ctx.drawImage(img, 0, 0, 600, 800);
+                    document.getElementById('preview-container').style.display = 'block';
+                }
+                img.src = event.target.result;
+            }
+            reader.readAsDataURL(file);
+        });
+        
+        function processAndUpload() {
+            const consoleName = document.getElementById('consoleSelect').value;
+            const romName = document.getElementById('romSelect').value;
+            const canvas = document.getElementById('canvas');
+            if (!consoleName || !romName) { alert("Fehlende Auswahl!"); return; }
+            showLoading('Erstelle & Lade hoch...');
+            canvas.toBlob(function(blob) {
+                const formData = new FormData();
+                const baseName = romName.substring(0, romName.lastIndexOf('.')) || romName;
+                formData.append("file", blob, baseName + ".png");
+                formData.append("console_folder", consoleName);
+                formData.append("mode", "thumbnail");
+                fetch('/post_upload', { method: 'POST', body: formData })
+                .then(r => r.text())
+                .then(t => { 
+                    hideLoading(); 
+                    document.getElementById('status').innerHTML = t; 
+                    checkExistingCover();
+                });
+            }, 'image/png');
+        }
+    </script>
+</body>
+</html>

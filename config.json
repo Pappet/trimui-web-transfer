@@ -1,0 +1,7 @@
+{
+"label":"web-transfer",
+"icon":"icon.png",
+"iconsel":"icon.png",
+"launch":"launch.sh",
+"description":"start webserver for File transfer."
+}
