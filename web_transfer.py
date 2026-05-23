@@ -127,6 +127,17 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
         except:
             return {"total": 0, "used": 0, "free": 0}
 
+    # Stock-OS Cache-Dateien & andere Nicht-ROM-Dateien, die im Roms/-Baum landen
+    ROM_EXCLUDED_SUFFIXES = ('.db', '.tmp', '.bak')
+
+    def _is_rom_file(self, name):
+        if name.startswith('.'):
+            return False
+        lower = name.lower()
+        if lower.endswith(self.ROM_EXCLUDED_SUFFIXES):
+            return False
+        return True
+
     def get_roms_dict(self):
         roms_structure = {}
         if os.path.exists(ROMS_DIR):
@@ -135,7 +146,7 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
                 if os.path.isdir(console_path) and not console.startswith('.'):
                     roms = []
                     for f in sorted(os.listdir(console_path)):
-                        if not f.startswith('.') and os.path.isfile(os.path.join(console_path, f)):
+                        if self._is_rom_file(f) and os.path.isfile(os.path.join(console_path, f)):
                             roms.append(f)
                     if roms:
                         roms_structure[console] = roms
