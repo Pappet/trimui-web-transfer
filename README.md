@@ -8,6 +8,7 @@ Runs directly on the handheld as a Python HTTP server — no extra software need
 
 - **File Upload** — Upload files from your PC to the TrimUI's SD card
 - **Cover Manager** — Assign and upload thumbnail covers for your ROMs
+- **Inventory** — Browse ROMs per console with covers, rename or delete entries (cover moves with the ROM)
 - **P2P Transfer** — Transfer files directly between two TrimUI devices (no PC required)
 - **Storage Dashboard** — Visual overview of SD card usage
 - **Multi-File Upload** — Upload multiple files simultaneously
@@ -31,6 +32,8 @@ Runs directly on the handheld as a Python HTTP server — no extra software need
 | GET | `/api/cover?console=...&rom=...` | Cover image for a ROM |
 | POST | `/post_upload` | File upload (multipart/form-data) |
 | POST | `/api/transfer_start` | Start a P2P transfer |
+| POST | `/api/rom/delete` | Delete a ROM (and its cover) |
+| POST | `/api/rom/rename` | Rename a ROM (and its cover) |
 
 ## Technical Details
 
