@@ -12,7 +12,7 @@ import html
 import uuid
 import socket
 
-# --- KONFIGURATION ---
+# --- CONFIGURATION ---
 PORT = 8000
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = "/mnt/SDCARD"
@@ -22,13 +22,13 @@ TEMPLATE_FILE = os.path.join(BASE_DIR, "template.html")
 
 tempfile.tempdir = ROOT_DIR
 
-# --- CLIENT LOGIK (P2P Transfer) ---
+# --- CLIENT LOGIC (P2P Transfer) ---
 class PeerClient:
-    """Übernimmt das Senden von Dateien an einen anderen Trimui"""
-    
+    """Handles sending files to another Trimui device."""
+
     @staticmethod
     def is_port_open(ip, port, timeout=0.2):
-        """Prüft schnell, ob der Port offen ist (Handshake)"""
+        """Quickly checks whether the port is open (TCP handshake)."""
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(timeout)
         try:
@@ -40,27 +40,25 @@ class PeerClient:
 
     @staticmethod
     def get_active_peers():
-        """Findet Geräte im ARP-Cache UND prüft, ob die App dort läuft"""
+        """Finds devices in the ARP cache and verifies the app is running on them."""
         candidates = []
         try:
             with open('/proc/net/arp', 'r') as f:
-                lines = f.readlines()[1:] # Header überspringen
+                lines = f.readlines()[1:]  # skip header line
                 for line in lines:
                     parts = line.split()
                     if len(parts) >= 4:
                         ip = parts[0]
                         mac = parts[3]
-                        # Filter: Nur lokale IPs, ignorieren unvollständige Einträge
+                        # only local IPs; skip incomplete entries
                         if ip.startswith("192.168.") and mac != "00:00:00:00:00:00":
                             candidates.append({"ip": ip, "mac": mac})
         except Exception:
             pass
-            
-        # Aktive Filterung: Wir pingen den Port 8000 an
+
+        # probe port 8000 on each candidate to keep routers and PCs off the list
         real_peers = []
         for peer in candidates:
-            # Wir prüfen kurz, ob Port 8000 offen ist.
-            # Das verhindert, dass Fritzboxen oder PCs in der Liste landen.
             if PeerClient.is_port_open(peer['ip'], PORT):
                 real_peers.append(peer)
                 
@@ -127,7 +125,7 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
         except:
             return {"total": 0, "used": 0, "free": 0}
 
-    # Stock-OS Cache-Dateien & andere Nicht-ROM-Dateien, die im Roms/-Baum landen
+    # stock OS cache files and other non-ROM files that end up in the Roms/ tree
     ROM_EXCLUDED_SUFFIXES = ('.db', '.tmp', '.bak')
 
     def _is_rom_file(self, name):
@@ -198,20 +196,17 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
             req_path = params.get('path', [ROMS_DIR])[0]
             self.send_json(self.get_files_in_dir(req_path))
         
-        # --- NEU: Endpunkt zum Abrufen von Cover-Bildern ---
         elif self.path.startswith('/api/cover'):
             query = urllib.parse.urlparse(self.path).query
             params = urllib.parse.parse_qs(query)
             console = params.get('console', [''])[0]
             rom = params.get('rom', [''])[0]
-            
+
             if console and rom:
-                # Dateinamen-Logik
                 base_name = os.path.splitext(rom)[0]
                 img_name = base_name + ".png"
                 img_path = os.path.join(IMGS_DIR, console, img_name)
-                
-                # Security Check
+
                 safe_path = self.validate_path(img_path, base=IMGS_DIR)
                 
                 if safe_path and os.path.exists(safe_path):
@@ -224,9 +219,8 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
                     except BrokenPipeError:
                         pass
                     return
-            
-            self.send_error(404, "Kein Cover gefunden")
-        # ---------------------------------------------------
+
+            self.send_error(404, "No cover found")
 
         # UI Pages
         elif self.path.startswith('/thumbnails'):
@@ -240,7 +234,7 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
         elif self.path == '/favicon.ico':
             self.send_error(404)
         else:
-            self.send_error(404, "Seite nicht gefunden")
+            self.send_error(404, "Page not found")
 
     def send_json(self, data):
         self.send_response(200)
@@ -253,14 +247,14 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
             with open(TEMPLATE_FILE, 'r', encoding='utf-8') as f:
                 content = f.read()
         except FileNotFoundError:
-            self.send_error(500, "Template-Datei nicht gefunden!")
+            self.send_error(500, "Template file not found!")
             return
 
         self.send_response(200)
         self.send_header('Content-type', 'text/html; charset=utf-8')
         self.end_headers()
         
-        # Status-Meldung aus Query-Parametern (nach 303 Redirect)
+        # status message injected from query params (after 303 redirect)
         parsed = urllib.parse.urlparse(self.path)
         params = urllib.parse.parse_qs(parsed.query)
         status_msg = html.escape(params.get('msg', [''])[0])
@@ -268,7 +262,7 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
         status_visible = "block" if status_msg else "none"
         
         base_folders = self.get_dirs(ROOT_DIR)
-        base_opts = f'<option value="{ROOT_DIR}">Hauptverzeichnis (/)</option>'
+        base_opts = f'<option value="{ROOT_DIR}">Root Directory (/)</option>'
         for d in base_folders:
             sel = "selected" if d == "Roms" else ""
             base_opts += f'<option value="{os.path.join(ROOT_DIR, d)}" {sel}>{d}</option>'
@@ -306,10 +300,10 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
                 console = data.get('console', '')
                 rom = data.get('rom', '')
                 if not console or not rom or '/' in console or '/' in rom or '..' in console or '..' in rom:
-                    raise ValueError("Ungültige Parameter")
+                    raise ValueError("Invalid parameters")
                 rom_path = self.validate_path(os.path.join(ROMS_DIR, console, rom), base=ROMS_DIR)
                 if not rom_path or not os.path.isfile(rom_path):
-                    raise ValueError("ROM nicht gefunden")
+                    raise ValueError("ROM not found")
                 os.remove(rom_path)
                 cover = self._cover_path(console, rom)
                 cover_removed = False
@@ -329,23 +323,23 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
                 old_name = data.get('old_name', '')
                 new_name = data.get('new_name', '')
                 if not console or not old_name or not new_name:
-                    raise ValueError("Ungültige Parameter")
+                    raise ValueError("Invalid parameters")
                 if '/' in console or '..' in console:
-                    raise ValueError("Ungültige Konsole")
+                    raise ValueError("Invalid console")
                 if '/' in new_name or '..' in new_name or new_name.startswith('.'):
-                    raise ValueError("Ungültiger neuer Name")
+                    raise ValueError("Invalid new name")
                 if '/' in old_name or '..' in old_name:
-                    raise ValueError("Ungültiger alter Name")
+                    raise ValueError("Invalid old name")
                 old_path = self.validate_path(os.path.join(ROMS_DIR, console, old_name), base=ROMS_DIR)
                 new_path = self.validate_path(os.path.join(ROMS_DIR, console, new_name), base=ROMS_DIR)
                 if not old_path or not os.path.isfile(old_path):
-                    raise ValueError("ROM nicht gefunden")
+                    raise ValueError("ROM not found")
                 if not new_path:
-                    raise ValueError("Ungültiges Ziel")
+                    raise ValueError("Invalid target")
                 if os.path.exists(new_path):
-                    raise ValueError("Zielname existiert bereits")
+                    raise ValueError("Target name already exists")
                 os.rename(old_path, new_path)
-                # Cover mitziehen
+                # rename cover alongside ROM
                 old_cover = self._cover_path(console, old_name)
                 new_cover = self._cover_path(console, new_name)
                 cover_renamed = False
@@ -369,7 +363,7 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
                 
                 safe_source = self.validate_path(source_file)
                 if not safe_source or not os.path.isfile(safe_source):
-                     raise ValueError("Lokale Datei ungültig")
+                     raise ValueError("Invalid local file")
 
                 success, msg = PeerClient.send_file(safe_source, target_ip, target_folder)
                 self.send_json({"success": success, "message": msg})
@@ -393,7 +387,7 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
                     if mode == "thumbnail":
                         console_folder = form.getvalue("console_folder")
                         if not console_folder or "/" in console_folder or ".." in console_folder:
-                             raise ValueError("Ungültiger Konsolen-Ordner")
+                             raise ValueError("Invalid console folder")
                         target_dir = os.path.join(IMGS_DIR, console_folder)
                         if not os.path.exists(target_dir): os.makedirs(target_dir, exist_ok=True)
                         
@@ -403,15 +397,15 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
                             safe_fn = html.escape(fn)
                             with open(os.path.join(target_dir, fn), 'wb') as f:
                                 shutil.copyfileobj(fileitem.file, f)
-                            msg = f"<span style='color:#28a745'>Erfolg! Gespeichert: {safe_fn}</span>"
-                        else: msg = "Fehler: Keine Datei."
+                            msg = f"<span style='color:#28a745'>Success! Saved: {safe_fn}</span>"
+                        else: msg = "Error: No file."
                         self.send_response(200); self.end_headers(); self.wfile.write(msg.encode())
                     
                     else:
-                        # Normaler Upload
+                        # standard upload
                         target_path_raw = form.getvalue("target_folder") or ROOT_DIR
                         target_path = self.validate_path(target_path_raw)
-                        if not target_path: raise ValueError("Ungültiger Zielpfad")
+                        if not target_path: raise ValueError("Invalid target path")
                         
                         if not os.path.exists(target_path):
                             os.makedirs(target_path, exist_ok=True)
@@ -427,7 +421,7 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
                                     shutil.copyfileobj(fileitem.file, f)
                                 count += 1
                         
-                        msg = urllib.parse.quote(f"{count} Datei(en) empfangen")
+                        msg = urllib.parse.quote(f"{count} file(s) received")
                         self.send_response(303)
                         self.send_header('Location', f'/?status=success&msg={msg}')
                         self.end_headers()
@@ -441,11 +435,11 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
                     self.send_header('Location', f'/?status=error&msg={urllib.parse.quote(error_msg)}')
                     self.end_headers()
         else:
-            self.send_error(404, "Pfad nicht gefunden")
+            self.send_error(404, "Path not found")
 
 # --- SERVER START ---
 os.chdir(ROOT_DIR)
 if not os.path.exists(IMGS_DIR): os.makedirs(IMGS_DIR, exist_ok=True)
 with ThreadingHTTPServer(("", PORT), UltimateHandler) as httpd:
-    print(f"Server läuft auf Port {PORT}")
+    print(f"Server running on port {PORT}")
     httpd.serve_forever()
