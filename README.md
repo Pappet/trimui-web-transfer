@@ -66,17 +66,6 @@ http://<trimui-ip>:8000
 
 ## API Reference
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/api/roms` | ROM list grouped by console |
-| `GET` | `/api/status` | SD card storage usage |
-| `GET` | `/api/peers` | TrimUI devices discovered on the local network |
-| `GET` | `/api/dirs?path=...` | Subdirectories of a given path |
-| `GET` | `/api/files?path=...` | Files inside a directory |
-| `GET` | `/api/cover?console=...&rom=...` | Cover image for a specific ROM |
-| `POST` | `/post_upload` | File upload (multipart/form-data) |
-| `POST` | `/api/transfer_start` | Initiate a P2P transfer to another device |
-
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/roms` | ROM list grouped by console |
