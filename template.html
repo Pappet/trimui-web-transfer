@@ -50,6 +50,30 @@
         .status-success { background: #1e3a2f; color: #28a745; border: 1px solid #28a745; }
         .status-error { background: #3a1e1e; color: #dc3545; border: 1px solid #dc3545; display: block; }
         button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Inventory */
+        .console-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+        .console-card { background: #333; padding: 15px; border-radius: 6px; cursor: pointer; text-align: center; border: 2px solid transparent; transition: border-color 0.15s; }
+        .console-card:hover { border-color: #007bff; }
+        .console-card .name { font-weight: bold; color: #eee; word-break: break-word; }
+        .console-card .count { color: #888; font-size: 0.85em; margin-top: 4px; }
+        .inv-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+        .inv-back { width: auto; padding: 6px 12px; margin: 0; background: #444; font-weight: normal; font-size: 0.9em; }
+        .inv-search { flex: 1; min-width: 180px; margin: 0; padding: 8px; }
+        .inv-list { background: #222; border: 1px solid #444; border-radius: 4px; padding: 5px; max-height: 600px; overflow-y: auto; }
+        .inv-row { display: flex; align-items: center; gap: 10px; padding: 8px; border-bottom: 1px solid #333; }
+        .inv-row:hover { background: #2a2a2a; }
+        .inv-row:last-child { border-bottom: none; }
+        .inv-cover { width: 48px; height: 64px; object-fit: cover; background: #1a1a1a; border-radius: 3px; flex-shrink: 0; }
+        .inv-cover-placeholder { width: 48px; height: 64px; background: #1a1a1a; border-radius: 3px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #555; font-size: 0.7em; }
+        .inv-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .inv-actions { display: flex; gap: 5px; flex-shrink: 0; }
+        .inv-actions button { width: auto; padding: 5px 10px; margin: 0; font-size: 0.8em; font-weight: normal; }
+        .btn-rename { background: #007bff; }
+        .btn-rename:hover { background: #0069d9; }
+        .btn-delete { background: #dc3545; }
+        .btn-delete:hover { background: #c82333; }
+        .inv-empty { padding: 20px; text-align: center; color: #888; }
     </style>
 </head>
 <body>
@@ -68,6 +92,7 @@
     
     <div class="nav">
         <a href="/" class="{{NAV_UPLOAD_ACTIVE}}">Datei Upload</a>
+        <a href="/inventory" class="{{NAV_INV_ACTIVE}}">Inventar</a>
         <a href="/thumbnails" class="{{NAV_THUMB_ACTIVE}}">Cover Manager</a>
         <a href="/sync" class="{{NAV_SYNC_ACTIVE}}">P2P Transfer</a>
     </div>
@@ -90,6 +115,22 @@
             <div id="file-size-info"></div>
             <button type="submit">Hochladen</button>
         </form>
+    </div>
+
+    <div id="inventory-section" class="card" style="display: {{DISPLAY_INV}};">
+        <h2>Inventar</h2>
+        <div id="inv-consoles-view">
+            <p style="color:#aaa; font-size:0.9em;">W&auml;hle eine Konsole, um die ROMs zu sehen.</p>
+            <div id="inv-console-grid" class="console-grid"><div class="inv-empty">Lade...</div></div>
+        </div>
+        <div id="inv-roms-view" style="display:none;">
+            <div class="inv-toolbar">
+                <button type="button" class="inv-back" onclick="invShowConsoles()">&larr; Konsolen</button>
+                <h3 id="inv-current-console" style="margin:0; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;"></h3>
+            </div>
+            <input type="text" class="inv-search" id="inv-search" placeholder="ROMs filtern..." oninput="invRenderRoms()">
+            <div id="inv-rom-list" class="inv-list"></div>
+        </div>
     </div>
 
     <div id="sync-section" class="card" style="display: {{DISPLAY_SYNC}};">
@@ -306,6 +347,134 @@
                 if (btn) btn.disabled = false;
                 p2pStatus.innerText = "Verbindungsfehler.";
             });
+        }
+
+        // --- INVENTORY ---
+        let invRomData = {};
+        let invCurrentConsole = null;
+
+        function invEscape(s) {
+            return String(s).replace(/[&<>"']/g, c => ({
+                '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+            }[c]));
+        }
+
+        function invLoad() {
+            const grid = document.getElementById('inv-console-grid');
+            grid.innerHTML = '<div class="inv-empty">Lade...</div>';
+            fetch('/api/roms').then(r => r.json()).then(data => {
+                invRomData = data;
+                const keys = Object.keys(data);
+                if (keys.length === 0) {
+                    grid.innerHTML = '<div class="inv-empty">Keine ROMs gefunden.</div>';
+                    return;
+                }
+                grid.innerHTML = '';
+                keys.forEach(k => {
+                    const card = document.createElement('div');
+                    card.className = 'console-card';
+                    card.innerHTML = `<div class="name">${invEscape(k)}</div><div class="count">${data[k].length} ROMs</div>`;
+                    card.onclick = () => invShowRoms(k);
+                    grid.appendChild(card);
+                });
+            });
+        }
+
+        function invShowConsoles() {
+            document.getElementById('inv-consoles-view').style.display = 'block';
+            document.getElementById('inv-roms-view').style.display = 'none';
+            invCurrentConsole = null;
+        }
+
+        function invShowRoms(consoleKey) {
+            invCurrentConsole = consoleKey;
+            document.getElementById('inv-consoles-view').style.display = 'none';
+            document.getElementById('inv-roms-view').style.display = 'block';
+            document.getElementById('inv-current-console').innerText = consoleKey;
+            document.getElementById('inv-search').value = '';
+            invRenderRoms();
+        }
+
+        function invRenderRoms() {
+            const list = document.getElementById('inv-rom-list');
+            const filter = document.getElementById('inv-search').value.toLowerCase();
+            const roms = (invRomData[invCurrentConsole] || []).filter(r => r.toLowerCase().includes(filter));
+            if (roms.length === 0) {
+                list.innerHTML = '<div class="inv-empty">Keine ROMs.</div>';
+                return;
+            }
+            list.innerHTML = '';
+            roms.forEach(rom => {
+                const row = document.createElement('div');
+                row.className = 'inv-row';
+                const coverUrl = `/api/cover?console=${encodeURIComponent(invCurrentConsole)}&rom=${encodeURIComponent(rom)}`;
+                row.innerHTML = `
+                    <img class="inv-cover" src="${coverUrl}" alt="" onerror="this.outerHTML='<div class=\\'inv-cover-placeholder\\'>kein Cover</div>'">
+                    <div class="inv-name" title="${invEscape(rom)}">${invEscape(rom)}</div>
+                    <div class="inv-actions">
+                        <button type="button" class="btn-rename">Umbenennen</button>
+                        <button type="button" class="btn-delete">L&ouml;schen</button>
+                    </div>
+                `;
+                row.querySelector('.btn-rename').onclick = () => invRename(rom);
+                row.querySelector('.btn-delete').onclick = () => invDelete(rom);
+                list.appendChild(row);
+            });
+        }
+
+        function invDelete(rom) {
+            if (!confirm(`ROM wirklich löschen?\n\n${rom}\n\nDas zugehörige Cover wird ebenfalls entfernt.`)) return;
+            showLoading('Lösche...');
+            fetch('/api/rom/delete', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ console: invCurrentConsole, rom: rom })
+            })
+            .then(r => r.json())
+            .then(data => {
+                hideLoading();
+                if (data.success) {
+                    invRomData[invCurrentConsole] = invRomData[invCurrentConsole].filter(r => r !== rom);
+                    invRenderRoms();
+                    updateStorage();
+                } else {
+                    alert('Fehler: ' + (data.message || 'unbekannt'));
+                }
+            })
+            .catch(err => { hideLoading(); alert('Verbindungsfehler.'); });
+        }
+
+        function invRename(rom) {
+            const newName = prompt('Neuer Dateiname (inkl. Endung):', rom);
+            if (!newName || newName === rom) return;
+            if (newName.indexOf('/') !== -1 || newName.startsWith('.')) {
+                alert('Ungültiger Name.');
+                return;
+            }
+            showLoading('Umbenennen...');
+            fetch('/api/rom/rename', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ console: invCurrentConsole, old_name: rom, new_name: newName })
+            })
+            .then(r => r.json())
+            .then(data => {
+                hideLoading();
+                if (data.success) {
+                    const arr = invRomData[invCurrentConsole];
+                    const idx = arr.indexOf(rom);
+                    if (idx !== -1) arr[idx] = newName;
+                    arr.sort();
+                    invRenderRoms();
+                } else {
+                    alert('Fehler: ' + (data.message || 'unbekannt'));
+                }
+            })
+            .catch(err => { hideLoading(); alert('Verbindungsfehler.'); });
+        }
+
+        if (document.querySelector('#inventory-section').style.display === 'block') {
+            invLoad();
         }
 
         // --- THUMBNAIL / ROMS ---

@@ -162,6 +162,11 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
                     files.append(f)
         return files
 
+    def _cover_path(self, console, rom):
+        base_name = os.path.splitext(rom)[0]
+        img_path = os.path.join(IMGS_DIR, console, base_name + ".png")
+        return self.validate_path(img_path, base=IMGS_DIR)
+
     def do_GET(self):
         # API Endpoints
         if self.path == '/api/roms':
@@ -217,6 +222,8 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
             self.send_ui("thumbnail")
         elif self.path.startswith('/sync'):
             self.send_ui("sync")
+        elif self.path.startswith('/inventory'):
+            self.send_ui("inventory")
         elif self.path == '/' or self.path.startswith('/?') or self.path == '/index.html':
             self.send_ui("upload")
         elif self.path == '/favicon.ico':
@@ -261,9 +268,11 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
             '{{NAV_UPLOAD_ACTIVE}}': 'active' if mode == 'upload' else '',
             '{{NAV_THUMB_ACTIVE}}': 'active' if mode == 'thumbnail' else '',
             '{{NAV_SYNC_ACTIVE}}': 'active' if mode == 'sync' else '',
+            '{{NAV_INV_ACTIVE}}': 'active' if mode == 'inventory' else '',
             '{{DISPLAY_UPLOAD}}': 'block' if mode == 'upload' else 'none',
             '{{DISPLAY_THUMB}}': 'block' if mode == 'thumbnail' else 'none',
             '{{DISPLAY_SYNC}}': 'block' if mode == 'sync' else 'none',
+            '{{DISPLAY_INV}}': 'block' if mode == 'inventory' else 'none',
             '{{STATUS_MSG}}': status_msg,
             '{{STATUS_TYPE}}': status_type,
             '{{STATUS_VISIBLE}}': status_visible
@@ -274,7 +283,69 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
 
         self.wfile.write(content.encode('utf-8'))
 
+    def _read_json_body(self):
+        length = int(self.headers.get('content-length', 0))
+        return json.loads(self.rfile.read(length)) if length else {}
+
     def do_POST(self):
+        # ROM Delete
+        if self.path == '/api/rom/delete':
+            try:
+                data = self._read_json_body()
+                console = data.get('console', '')
+                rom = data.get('rom', '')
+                if not console or not rom or '/' in console or '/' in rom or '..' in console or '..' in rom:
+                    raise ValueError("Ungültige Parameter")
+                rom_path = self.validate_path(os.path.join(ROMS_DIR, console, rom), base=ROMS_DIR)
+                if not rom_path or not os.path.isfile(rom_path):
+                    raise ValueError("ROM nicht gefunden")
+                os.remove(rom_path)
+                cover = self._cover_path(console, rom)
+                cover_removed = False
+                if cover and os.path.isfile(cover):
+                    os.remove(cover)
+                    cover_removed = True
+                self.send_json({"success": True, "cover_removed": cover_removed})
+            except Exception as e:
+                self.send_json({"success": False, "message": str(e)})
+            return
+
+        # ROM Rename
+        if self.path == '/api/rom/rename':
+            try:
+                data = self._read_json_body()
+                console = data.get('console', '')
+                old_name = data.get('old_name', '')
+                new_name = data.get('new_name', '')
+                if not console or not old_name or not new_name:
+                    raise ValueError("Ungültige Parameter")
+                if '/' in console or '..' in console:
+                    raise ValueError("Ungültige Konsole")
+                if '/' in new_name or '..' in new_name or new_name.startswith('.'):
+                    raise ValueError("Ungültiger neuer Name")
+                if '/' in old_name or '..' in old_name:
+                    raise ValueError("Ungültiger alter Name")
+                old_path = self.validate_path(os.path.join(ROMS_DIR, console, old_name), base=ROMS_DIR)
+                new_path = self.validate_path(os.path.join(ROMS_DIR, console, new_name), base=ROMS_DIR)
+                if not old_path or not os.path.isfile(old_path):
+                    raise ValueError("ROM nicht gefunden")
+                if not new_path:
+                    raise ValueError("Ungültiges Ziel")
+                if os.path.exists(new_path):
+                    raise ValueError("Zielname existiert bereits")
+                os.rename(old_path, new_path)
+                # Cover mitziehen
+                old_cover = self._cover_path(console, old_name)
+                new_cover = self._cover_path(console, new_name)
+                cover_renamed = False
+                if old_cover and new_cover and os.path.isfile(old_cover) and not os.path.exists(new_cover):
+                    os.rename(old_cover, new_cover)
+                    cover_renamed = True
+                self.send_json({"success": True, "cover_renamed": cover_renamed})
+            except Exception as e:
+                self.send_json({"success": False, "message": str(e)})
+            return
+
         # P2P Transfer Start
         if self.path == '/api/transfer_start':
             try:
