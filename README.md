@@ -31,10 +31,16 @@ No installation on your PC needed — open a browser and go.*
 |---|---------|-------------|
 | ⬆️ | **File Upload** | Upload ROMs and files from your PC directly to the SD card |
 | 🖼️ | **Cover Manager** | Browse ROMs by console, assign and upload thumbnail covers (600×800 PNG) |
-| 🔁 | **P2P Transfer** | Send files directly between two TrimUI devices via ARP discovery — no PC needed |
+| 🔁 | **P2P Transfer** | Send files directly between two TrimUI devices via ARP discovery — no PC needed *(experimental, untested)* |
 | 💾 | **Storage Dashboard** | Live SD card usage bar with used / total display |
 | 📂 | **Subfolder Navigation** | Dynamically browse the full folder structure before uploading |
 | 🗂️ | **Multi-File Upload** | Select and upload multiple files at once |
+
+---
+
+## Compatibility
+
+Built and tested on the **TrimUI Smart Pro S running Stock OS**. Because I don't own other handhelds or use custom firmwares, I cannot verify whether it works the same way on different devices or setups. Feedback from other configurations is welcome.
 
 ---
 
