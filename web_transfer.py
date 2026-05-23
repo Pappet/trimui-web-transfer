@@ -12,7 +12,7 @@ import html
 import uuid
 import socket
 
-# --- KONFIGURATION ---
+# --- CONFIGURATION ---
 PORT = 8000
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = "/mnt/SDCARD"
@@ -22,13 +22,13 @@ TEMPLATE_FILE = os.path.join(BASE_DIR, "template.html")
 
 tempfile.tempdir = ROOT_DIR
 
-# --- CLIENT LOGIK (P2P Transfer) ---
+# --- CLIENT LOGIC (P2P Transfer) ---
 class PeerClient:
-    """Übernimmt das Senden von Dateien an einen anderen Trimui"""
-    
+    """Handles sending files to another Trimui device."""
+
     @staticmethod
     def is_port_open(ip, port, timeout=0.2):
-        """Prüft schnell, ob der Port offen ist (Handshake)"""
+        """Quickly checks whether the port is open (TCP handshake)."""
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(timeout)
         try:
@@ -40,27 +40,25 @@ class PeerClient:
 
     @staticmethod
     def get_active_peers():
-        """Findet Geräte im ARP-Cache UND prüft, ob die App dort läuft"""
+        """Finds devices in the ARP cache and verifies the app is running on them."""
         candidates = []
         try:
             with open('/proc/net/arp', 'r') as f:
-                lines = f.readlines()[1:] # Header überspringen
+                lines = f.readlines()[1:]  # skip header line
                 for line in lines:
                     parts = line.split()
                     if len(parts) >= 4:
                         ip = parts[0]
                         mac = parts[3]
-                        # Filter: Nur lokale IPs, ignorieren unvollständige Einträge
+                        # only local IPs; skip incomplete entries
                         if ip.startswith("192.168.") and mac != "00:00:00:00:00:00":
                             candidates.append({"ip": ip, "mac": mac})
         except Exception:
             pass
-            
-        # Aktive Filterung: Wir pingen den Port 8000 an
+
+        # probe port 8000 on each candidate to keep routers and PCs off the list
         real_peers = []
         for peer in candidates:
-            # Wir prüfen kurz, ob Port 8000 offen ist.
-            # Das verhindert, dass Fritzboxen oder PCs in der Liste landen.
             if PeerClient.is_port_open(peer['ip'], PORT):
                 real_peers.append(peer)
                 
@@ -127,7 +125,7 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
         except:
             return {"total": 0, "used": 0, "free": 0}
 
-    # Stock-OS Cache-Dateien & andere Nicht-ROM-Dateien, die im Roms/-Baum landen
+    # stock OS cache files and other non-ROM files that end up in the Roms/ tree
     ROM_EXCLUDED_SUFFIXES = ('.db', '.tmp', '.bak')
 
     def _is_rom_file(self, name):
@@ -198,20 +196,17 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
             req_path = params.get('path', [ROMS_DIR])[0]
             self.send_json(self.get_files_in_dir(req_path))
         
-        # --- NEU: Endpunkt zum Abrufen von Cover-Bildern ---
         elif self.path.startswith('/api/cover'):
             query = urllib.parse.urlparse(self.path).query
             params = urllib.parse.parse_qs(query)
             console = params.get('console', [''])[0]
             rom = params.get('rom', [''])[0]
-            
+
             if console and rom:
-                # Dateinamen-Logik
                 base_name = os.path.splitext(rom)[0]
                 img_name = base_name + ".png"
                 img_path = os.path.join(IMGS_DIR, console, img_name)
-                
-                # Security Check
+
                 safe_path = self.validate_path(img_path, base=IMGS_DIR)
                 
                 if safe_path and os.path.exists(safe_path):
@@ -224,9 +219,8 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
                     except BrokenPipeError:
                         pass
                     return
-            
+
             self.send_error(404, "No cover found")
-        # ---------------------------------------------------
 
         # UI Pages
         elif self.path.startswith('/thumbnails'):
@@ -260,7 +254,7 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
         self.send_header('Content-type', 'text/html; charset=utf-8')
         self.end_headers()
         
-        # Status-Meldung aus Query-Parametern (nach 303 Redirect)
+        # status message injected from query params (after 303 redirect)
         parsed = urllib.parse.urlparse(self.path)
         params = urllib.parse.parse_qs(parsed.query)
         status_msg = html.escape(params.get('msg', [''])[0])
@@ -345,7 +339,7 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
                 if os.path.exists(new_path):
                     raise ValueError("Target name already exists")
                 os.rename(old_path, new_path)
-                # Cover mitziehen
+                # rename cover alongside ROM
                 old_cover = self._cover_path(console, old_name)
                 new_cover = self._cover_path(console, new_name)
                 cover_renamed = False
@@ -408,7 +402,7 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
                         self.send_response(200); self.end_headers(); self.wfile.write(msg.encode())
                     
                     else:
-                        # Normaler Upload
+                        # standard upload
                         target_path_raw = form.getvalue("target_folder") or ROOT_DIR
                         target_path = self.validate_path(target_path_raw)
                         if not target_path: raise ValueError("Invalid target path")
