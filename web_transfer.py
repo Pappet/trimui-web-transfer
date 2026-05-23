@@ -106,6 +106,7 @@ class PeerClient:
 # --- THREADING SERVER ---
 class ThreadingHTTPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     daemon_threads = True
+    allow_reuse_address = True
 
 class UltimateHandler(http.server.SimpleHTTPRequestHandler):
     
@@ -211,25 +212,13 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
             self.send_error(404, "Kein Cover gefunden")
         # ---------------------------------------------------
 
-        # Status-Meldungen aus Redirect (nach erfolgreichem POST)
-        status_msg = ""
-        status_type = ""
-        status_visible = "none"
-        if self.path in ('/', '/index.html', '/thumbnails', '/sync'):
-            query = urllib.parse.urlparse(self.path).query
-            params = urllib.parse.parse_qs(query)
-            status_msg = html.escape(params.get('msg', [''])[0])
-            status_type = html.escape(params.get('status', [''])[0])
-            if status_msg:
-                status_visible = "block"
-
         # UI Pages
-        elif self.path == '/thumbnails':
-            self.send_ui("thumbnail", status_msg, status_type, status_visible)
-        elif self.path == '/sync':
-            self.send_ui("sync", status_msg, status_type, status_visible)
-        elif self.path == '/' or self.path == '/index.html':
-            self.send_ui("upload", status_msg, status_type, status_visible)
+        elif self.path.startswith('/thumbnails'):
+            self.send_ui("thumbnail")
+        elif self.path.startswith('/sync'):
+            self.send_ui("sync")
+        elif self.path == '/' or self.path.startswith('/?') or self.path == '/index.html':
+            self.send_ui("upload")
         elif self.path == '/favicon.ico':
             self.send_error(404)
         else:
@@ -241,7 +230,7 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(json.dumps(data).encode())
 
-    def send_ui(self, mode, status_msg="", status_type="", status_visible="none"):
+    def send_ui(self, mode):
         try:
             with open(TEMPLATE_FILE, 'r', encoding='utf-8') as f:
                 content = f.read()
@@ -252,6 +241,13 @@ class UltimateHandler(http.server.SimpleHTTPRequestHandler):
         self.send_response(200)
         self.send_header('Content-type', 'text/html; charset=utf-8')
         self.end_headers()
+        
+        # Status-Meldung aus Query-Parametern (nach 303 Redirect)
+        parsed = urllib.parse.urlparse(self.path)
+        params = urllib.parse.parse_qs(parsed.query)
+        status_msg = html.escape(params.get('msg', [''])[0])
+        status_type = html.escape(params.get('status', [''])[0])
+        status_visible = "block" if status_msg else "none"
         
         base_folders = self.get_dirs(ROOT_DIR)
         base_opts = f'<option value="{ROOT_DIR}">Hauptverzeichnis (/)</option>'
